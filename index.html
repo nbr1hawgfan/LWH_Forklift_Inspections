@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Forklift Inspection</title>
+<meta name="theme-color" content="#C41230">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.5/signature_pad.umd.min.js"></script>
+<style>
+  :root {
+    /* Logistics Warehouse portal palette */
+    --brand-red: #C41230;
+    --brand-red-dark: #9E0E27;
+    --brand-black: #1A1A1A;
+    --brand-gold: #D4A017;
+
+    --bg: #F4F4F5;
+    --surface: #FFFFFF;
+    --surface-2: #F7F7F8;
+    --border: #E2E2E4;
+    --text: #1A1A1A;
+    --text-dim: #5B6572;
+    --primary: #1A1A1A;
+    --success: #157A3D;
+    --danger: #C41230;
+    --warning: #B8860B;
+    --na: #8A8D91;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: Arial, Helvetica, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding-bottom: env(safe-area-inset-bottom, 24px);
+  }
+  .container { max-width: 700px; margin: 0 auto; padding: 0 14px 24px; }
+  header {
+    background: linear-gradient(135deg, var(--brand-red), var(--brand-red-dark));
+    padding: 1rem 1rem; margin-bottom: 1.1rem;
+    display: flex; align-items: center; gap: 0.75rem;
+    border-bottom: 3px solid var(--brand-black);
+  }
+  .header-logo {
+    width: 40px; height: 40px; border-radius: 50%; background: #fff; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: var(--brand-red); font-size: 1rem;
+  }
+  header h1 { margin: 0; font-size: 1.15rem; color: #fff; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 800; }
+  header .header-sub { font-size: 0.72rem; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 1px; }
+  #connStatus { font-size: 0.72rem; color: rgba(255,255,255,0.85); margin-top: 4px; }
+  #connStatus.offline { color: #ffd9d9; font-weight: 600; }
+  .card {
+    background: var(--surface); border: 1.5px solid var(--brand-gold);
+    border-radius: 6px; margin-bottom: 1rem; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card-header {
+    padding: 0.8rem 1rem; border-bottom: 1px solid var(--border);
+    font-weight: 800; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--brand-black); background: var(--surface-2);
+  }
+  .card-body { padding: 1rem; }
+  label { display:block; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 0.35rem; font-weight: 600; }
+  input[type=text], input[type=date], input[type=number], select, textarea {
+    width: 100%; background: var(--surface); border: 1.5px solid var(--border);
+    color: var(--text); border-radius: 4px; padding: 0.65rem 0.8rem;
+    font-size: 1rem; margin-bottom: 1rem;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand-red); }
+  .field-error { color: var(--danger); font-size: 0.78rem; margin-top: -0.7rem; margin-bottom: 0.8rem; display: none; font-weight: 600; }
+  .banner { border-radius: 4px; padding: 0.75rem 0.9rem; margin-bottom: 1rem; font-size: 0.88rem; display: none; font-weight: 600; }
+  .banner.warning { background: #FBF2DD; border: 1.5px solid var(--brand-gold); color: #7A5C00; display: block; }
+  .banner.danger { background: #FBE4E8; border: 1.5px solid var(--danger); color: var(--brand-red-dark); display: block; }
+  .banner.info { background: #EDEDED; border: 1.5px solid var(--brand-black); color: var(--brand-black); display: block; }
+  .category-header {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--brand-black); padding: 0.65rem 0.9rem; border-radius: 4px; margin-bottom: 0.75rem;
+  }
+  .category-header h3 { margin: 0; font-size: 0.85rem; color: #fff; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
+  .badge { font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 3px; background: rgba(255,255,255,0.15); color: #fff; }
+  .badge.ok { background: var(--success); color: #fff; }
+  .badge.bad { background: var(--danger); color: #fff; }
+  .checklist-item {
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 4px;
+    padding: 0.85rem; margin-bottom: 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  }
+  .checklist-item.pass { border-color: var(--success); border-left-width: 4px; }
+  .checklist-item.fail { border-color: var(--danger); border-left-width: 4px; }
+  .checklist-item.na { opacity: 0.55; }
+  .checklist-item.na .checklist-question { text-decoration: line-through; }
+  .checklist-question { flex: 1; font-size: 0.92rem; }
+  .status-buttons { display: flex; gap: 0.4rem; flex-shrink: 0; }
+  .status-btn {
+    width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--border);
+    background: var(--surface); color: var(--text-dim); font-size: 1.1rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .status-btn.active-pass { border-color: var(--success); background: rgba(21,122,61,0.12); color: var(--success); }
+  .status-btn.active-fail { border-color: var(--danger); background: rgba(196,18,48,0.1); color: var(--danger); }
+  .status-btn.active-na { border-color: var(--na); background: rgba(138,141,145,0.15); color: var(--na); }
+  .checkbox-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+  .checkbox-row input[type=checkbox] { width: 20px; height: 20px; margin: 0; flex-shrink: 0; accent-color: var(--brand-red); }
+  .checkbox-row label { margin: 0; color: var(--text); font-weight: 400; }
+  #signaturePad { width: 100%; height: 180px; border: 1.5px solid var(--border); border-radius: 4px; background: #fff; touch-action: none; }
+  button.btn { border: none; border-radius: 4px; padding: 0.8rem; font-size: 0.95rem; font-weight: 800; width: 100%; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; }
+  .btn-primary { background: var(--brand-black); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--brand-black); border: 1.5px solid var(--border); }
+  .btn-primary:disabled { opacity: 0.6; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--brand-black); border: 1px solid var(--border); color: #fff; padding: 0.7rem 1.1rem; border-radius: 4px; font-size: 0.9rem; display: none; z-index: 999; max-width: 90%; text-align: center; }
+  #toast.error { border-color: var(--danger); background: var(--brand-red-dark); }
+  #successOverlay { position: fixed; inset: 0; background: rgba(26,26,26,0.85); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+  #successOverlay .box { background: var(--surface); border-radius: 6px; padding: 2rem 1.5rem; text-align: center; max-width: 340px; border-top: 4px solid var(--brand-gold); }
+  .check-circle { width: 56px; height: 56px; border-radius: 50%; background: var(--success); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; }
+  a.admin-link { display:block; text-align:center; color: var(--brand-red); font-size: 0.8rem; margin-top: 1rem; text-decoration: none; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<header>
+  <div class="header-logo">LW</div>
+  <div>
+    <h1>Forklift Inspection</h1>
+    <div class="header-sub">Logistics Warehouse</div>
+    <div id="connStatus">Online</div>
+  </div>
+</header>
+
+
+<div class="container">
+  <form id="inspectionForm" novalidate>
+
+    <div class="card">
+      <div class="card-header">Basic Information</div>
+      <div class="card-body">
+        <label>Operator Name *</label>
+        <input type="text" id="operatorName" required>
+        <div class="field-error" id="operatorNameError">Please enter your name</div>
+
+        <label>Date *</label>
+        <input type="date" id="date" required>
+        <div class="field-error" id="dateError">Please select a date</div>
+
+        <label>Forklift Number *</label>
+        <select id="liftNumber" required><option value="">Loading...</option></select>
+        <div class="field-error" id="liftNumberError">Please select a forklift</div>
+
+        <div id="pmBanner" class="banner"></div>
+
+        <label>Location *</label>
+        <select id="location" required><option value="">Loading...</option></select>
+        <div class="field-error" id="locationError">Please select a location</div>
+
+        <label>Hour Meter Reading (whole numbers) *</label>
+        <input type="number" id="meterReading" required min="0" step="1" inputmode="numeric">
+        <div class="field-error" id="meterReadingError">Please enter a valid whole number</div>
+        <div id="lastReadingInfo" style="font-size:0.8rem;color:var(--text-dim);margin-top:-0.7rem;margin-bottom:0.8rem;"></div>
+      </div>
+    </div>
+
+    <div class="card" id="pmCard" style="display:none;">
+      <div class="card-header">Preventive Maintenance</div>
+      <div class="card-body">
+        <div class="checkbox-row">
+          <input type="checkbox" id="pmPerformedToday">
+          <label for="pmPerformedToday">PM was performed on this lift today (this resets the PM countdown)</label>
+        </div>
+      </div>
+    </div>
+
+    <div id="lpgSection" class="card" style="display:none;">
+      <div class="card-header">Propane Specific Checks</div>
+      <div class="card-body">
+        <div class="checkbox-row">
+          <input type="checkbox" id="propaneUsed">
+          <label for="propaneUsed">Propane Bottle Consumed</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Inspection Checklist</div>
+      <div class="card-body" id="checklistContainer">
+        <div style="color:var(--text-dim);">Loading checklist...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Notes and Photos</div>
+      <div class="card-body">
+        <label>Defects/Notes <span id="defectsRequired" style="color:var(--danger);display:none;">*</span></label>
+        <textarea id="defects" rows="4" placeholder="Enter any defects or notes here..."></textarea>
+        <div class="field-error" id="defectsError">Please describe the failed items</div>
+
+        <label>Upload Photos</label>
+        <input type="file" id="photos" multiple accept="image/*" capture="environment">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Signature *</div>
+      <div class="card-body">
+        <canvas id="signaturePad"></canvas>
+        <div class="field-error" id="signatureError">Please provide your signature</div>
+        <div style="height:0.75rem;"></div>
+        <button type="button" class="btn btn-secondary" id="clearSigBtn">Clear Signature</button>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary" id="submitBtn">Submit Inspection</button>
+    <a href="admin.html" class="admin-link">PM Admin</a>
+  </form>
+</div>
+
+<div id="successOverlay">
+  <div class="box">
+    <div class="check-circle">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+    <h3 style="margin:0 0 0.5rem;">Inspection Submitted</h3>
+    <p id="successMsg" style="color:var(--text-dim);font-size:0.9rem;margin:0 0 1.25rem;">Your inspection has been recorded.</p>
+    <button class="btn btn-primary" id="successOkBtn">OK</button>
+  </div>
+</div>
+
+<script>
+// ====== CONFIG - update this to your deployed GAS Web App URL ======
+const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
+const QUEUE_KEY = 'forklift_pending_submissions';
+const CACHE_KEY = 'forklift_bootstrap_cache';
+
+let checklistData = [];
+let forkliftData = [];
+let signaturePad;
+let isSubmitting = false;
+const itemStatus = {}; // id -> 'pass' | 'fail' | 'na'
+
+window.addEventListener('load', () => {
+  document.getElementById('date').valueAsDate = new Date();
+  initSignaturePad();
+  loadBootstrapData();
+  updateConnStatus();
+  flushQueueIfOnline();
+});
+window.addEventListener('online', () => { updateConnStatus(); flushQueueIfOnline(); });
+window.addEventListener('offline', updateConnStatus);
+
+['operatorName', 'date', 'liftNumber', 'location', 'meterReading'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const err = document.getElementById(id + 'Error');
+    if (err) err.style.display = 'none';
+  });
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+function updateConnStatus() {
+  const el = document.getElementById('connStatus');
+  if (navigator.onLine) { el.textContent = 'Online'; el.classList.remove('offline'); }
+  else { el.textContent = 'Offline — form will still work, submission will send once reconnected'; el.classList.add('offline'); }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type === 'error' ? 'error' : '';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3500);
+}
+
+/* ---------------- Bootstrap data (forklifts / locations / checklist) ---------------- */
+
+function loadBootstrapData() {
+  const cached = localStorage.getItem(CACHE_KEY);
+  if (cached) {
+    try { applyBootstrapData(JSON.parse(cached)); } catch (e) {}
+  }
+  if (!navigator.onLine) return;
+
+  fetch(`${API_URL}?action=bootstrap`)
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(res.data));
+        applyBootstrapData(res.data);
+      } else {
+        showToast('Could not load form data: ' + res.message, 'error');
+      }
+    })
+    .catch(() => {
+      if (!cached) showToast('Could not reach server, and no cached data available.', 'error');
+    });
+}
+
+function applyBootstrapData(data) {
+  forkliftData = data.forklifts || [];
+  checklistData = data.checklist || [];
+  populateForkliftDropdown(forkliftData);
+  populateLocationDropdown(data.locations || []);
+  renderChecklist(checklistData);
+}
+
+function populateForkliftDropdown(forklifts) {
+  const select = document.getElementById('liftNumber');
+  select.innerHTML = '<option value="">Select Forklift</option>';
+  forklifts.forEach(lift => {
+    const opt = document.createElement('option');
+    opt.value = lift.number;
+    opt.textContent = `${lift.number} (${lift.type})`;
+    opt.dataset.type = lift.type;
+    opt.dataset.lastReading = lift.lastReading ?? '';
+    opt.dataset.pmInterval = lift.pmInterval;
+    opt.dataset.lastPmMeter = lift.lastPmMeter;
+    select.appendChild(opt);
+  });
+}
+
+function populateLocationDropdown(locations) {
+  const select = document.getElementById('location');
+  select.innerHTML = '<option value="">Select Location</option>';
+  locations.forEach(loc => {
+    const opt = document.createElement('option');
+    opt.value = loc; opt.textContent = loc;
+    select.appendChild(opt);
+  });
+}
+
+document.getElementById('liftNumber').addEventListener('change', function () {
+  const opt = this.options[this.selectedIndex];
+  const isPropane = opt.dataset.type === 'Propane' || opt.dataset.type === 'LPG';
+  document.getElementById('lpgSection').style.display = isPropane ? 'block' : 'none';
+  document.getElementById('pmCard').style.display = this.value ? 'block' : 'none';
+
+  document.getElementById('meterReading').value = '';
+  const lastReading = parseInt(opt.dataset.lastReading, 10);
+  document.getElementById('lastReadingInfo').textContent = isNaN(lastReading)
+    ? 'No previous reading found' : `Last recorded reading: ${lastReading}`;
+
+  renderChecklist(checklistData, opt.dataset.type);
+  updatePmBanner();
+});
+
+document.getElementById('meterReading').addEventListener('input', updatePmBanner);
+document.getElementById('pmPerformedToday').addEventListener('change', updatePmBanner);
+
+function updatePmBanner() {
+  const banner = document.getElementById('pmBanner');
+  const liftSelect = document.getElementById('liftNumber');
+  const opt = liftSelect.options[liftSelect.selectedIndex];
+  const meterReading = parseFloat(document.getElementById('meterReading').value);
+  const pmPerformed = document.getElementById('pmPerformedToday').checked;
+
+  if (!liftSelect.value || isNaN(meterReading)) { banner.style.display = 'none'; return; }
+  if (pmPerformed) {
+    banner.className = 'banner info';
+    banner.textContent = `PM will be logged today at ${meterReading} hours, resetting the countdown.`;
+    return;
+  }
+
+  const pmInterval = Number(opt.dataset.pmInterval) || 0;
+  const lastPmMeter = Number(opt.dataset.lastPmMeter) || 0;
+  const hoursUntilPm = pmInterval - (meterReading - lastPmMeter);
+
+  if (hoursUntilPm <= 0) {
+    banner.className = 'banner danger';
+    banner.textContent = `⚠ PM overdue by ~${Math.abs(Math.round(hoursUntilPm))} hours (interval: ${pmInterval} hrs).`;
+  } else if (hoursUntilPm <= 20) {
+    banner.className = 'banner warning';
+    banner.textContent = `PM due in ~${Math.round(hoursUntilPm)} hours (interval: ${pmInterval} hrs).`;
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+/* ---------------- Checklist rendering with N/A by lift type ---------------- */
+
+// Treats "Propane" and "LPG" as the same fuel type, so it doesn't matter
+// which word your ForkliftData/Checklist sheets use, as long as it's consistent per sheet.
+function normalizeType(t) {
+  if (!t) return t;
+  const s = String(t).trim().toLowerCase();
+  if (s === 'propane' || s === 'lpg') return 'propane';
+  if (s === 'electric') return 'electric';
+  return s;
+}
+function isApplicable(appliesTo, liftType) {
+  if (!appliesTo || appliesTo === 'Both') return true;
+  return normalizeType(appliesTo) === normalizeType(liftType);
+}
+
+function renderChecklist(items, liftType) {
+  const container = document.getElementById('checklistContainer');
+  if (!items || items.length === 0) return;
+
+  const categorized = items.reduce((acc, item) => {
+    (acc[item.category || 'General'] = acc[item.category || 'General'] || []).push(item);
+    return acc;
+  }, {});
+
+  container.innerHTML = '';
+  Object.entries(categorized).forEach(([category, catItems]) => {
+    const div = document.createElement('div');
+    div.className = 'category-block';
+    div.style.marginBottom = '1.25rem';
+    div.innerHTML = `
+      <div class="category-header">
+        <h3>${category}</h3>
+        <span class="badge cat-badge">${catItems.length} items</span>
+      </div>
+      <div class="cat-items"></div>`;
+    const itemsWrap = div.querySelector('.cat-items');
+
+    catItems.forEach(item => {
+      const forcedNa = liftType && !isApplicable(item.appliesTo, liftType);
+      if (forcedNa) itemStatus[item.id] = 'na';
+      else if (itemStatus[item.id] === 'na' && !forcedNa) delete itemStatus[item.id];
+
+      const row = document.createElement('div');
+      row.className = 'checklist-item' + (forcedNa ? ' na' : '');
+      row.id = `item_${item.id}`;
+      row.innerHTML = `
+        <div class="checklist-question">${item.question}</div>
+        <div class="status-buttons">
+          <button type="button" class="status-btn" data-status="pass" ${forcedNa ? 'disabled' : ''}>✓</button>
+          <button type="button" class="status-btn" data-status="na" ${forcedNa ? 'disabled' : ''}>–</button>
+          <button type="button" class="status-btn" data-status="fail" ${forcedNa ? 'disabled' : ''}>✕</button>
+        </div>`;
+      itemsWrap.appendChild(row);
+
+      row.querySelectorAll('.status-btn').forEach(btn => {
+        btn.addEventListener('click', () => setItemStatus(item.id, btn.dataset.status, row));
+      });
+
+      if (forcedNa) applyItemVisual(row, 'na');
+      else if (itemStatus[item.id]) applyItemVisual(row, itemStatus[item.id]);
+    });
+
+    container.appendChild(div);
+  });
+
+  updateCategoryBadges();
+}
+
+function setItemStatus(id, status, row) {
+  itemStatus[id] = status;
+  applyItemVisual(row, status);
+  if (status === 'fail') addDefectNote(id, row);
+  updateCategoryBadges();
+}
+
+function applyItemVisual(row, status) {
+  row.classList.remove('pass', 'fail', 'na');
+  row.classList.add(status);
+  row.querySelectorAll('.status-btn').forEach(b => b.classList.remove('active-pass', 'active-fail', 'active-na'));
+  const btn = row.querySelector(`.status-btn[data-status="${status}"]`);
+  if (btn) btn.classList.add(`active-${status}`);
+}
+
+function addDefectNote(id, row) {
+  const question = row.querySelector('.checklist-question').textContent.trim();
+  const area = document.getElementById('defects');
+  const ts = new Date().toLocaleTimeString();
+  const line = `[${ts}] ${question} - Failed\n`;
+  area.value = area.value ? area.value + '\n' + line : line;
+  document.getElementById('defectsRequired').style.display = 'inline';
+}
+
+function updateCategoryBadges() {
+  document.querySelectorAll('.category-block').forEach(block => {
+    const rows = block.querySelectorAll('.checklist-item');
+    const badge = block.querySelector('.cat-badge');
+    let checked = 0, failed = 0;
+    rows.forEach(r => {
+      const id = r.id.replace('item_', '');
+      if (itemStatus[id]) checked++;
+      if (itemStatus[id] === 'fail') failed++;
+    });
+    badge.classList.remove('ok', 'bad');
+    if (checked === rows.length) {
+      if (failed > 0) { badge.textContent = `${failed} issue${failed === 1 ? '' : 's'}`; badge.classList.add('bad'); }
+      else { badge.textContent = 'All checked'; badge.classList.add('ok'); }
+    } else {
+      badge.textContent = `${checked}/${rows.length} checked`;
+    }
+  });
+}
+
+/* ---------------- Signature ---------------- */
+
+function initSignaturePad() {
+  const canvas = document.getElementById('signaturePad');
+  signaturePad = new SignaturePad(canvas, { minWidth: 1, maxWidth: 2.5, penColor: '#1e293b' });
+  function resize() {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const data = signaturePad.toData();
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext('2d').scale(ratio, ratio);
+    signaturePad.fromData(data);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  document.getElementById('clearSigBtn').addEventListener('click', () => {
+    signaturePad.clear();
+    document.getElementById('signatureError').style.display = 'none';
+  });
+}
+
+/* ---------------- Submission ---------------- */
+
+document.getElementById('inspectionForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  if (isSubmitting) return;
+  if (!validateForm()) { showToast('Please complete all required fields', 'error'); return; }
+
+  isSubmitting = true;
+  document.getElementById('submitBtn').disabled = true;
+
+  const formData = {
+    operatorName: document.getElementById('operatorName').value,
+    date: document.getElementById('date').value,
+    liftNumber: document.getElementById('liftNumber').value,
+    location: document.getElementById('location').value,
+    meterReading: document.getElementById('meterReading').value,
+    propaneUsed: document.getElementById('propaneUsed').checked,
+    pmPerformedToday: document.getElementById('pmPerformedToday').checked,
+    checklistResponses: getChecklistResponses(),
+    defects: document.getElementById('defects').value,
+    signature: signaturePad.toDataURL()
+  };
+
+  const photoInput = document.getElementById('photos');
+  if (photoInput.files.length > 0) {
+    filesToBase64(photoInput.files).then(photos => { formData.photos = photos; submit(formData); });
+  } else {
+    formData.photos = [];
+    submit(formData);
+  }
+});
+
+function getChecklistResponses() {
+  const responses = {};
+  checklistData.forEach(item => {
+    responses[item.id] = { status: itemStatus[item.id] || 'not_checked', question: item.question };
+  });
+  return responses;
+}
+
+function filesToBase64(fileList) {
+  return Promise.all(Array.from(fileList).map(file => new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.readAsDataURL(file);
+  })));
+}
+
+function submit(formData) {
+  const body = { action: 'submitInspection', payload: formData };
+
+  if (!navigator.onLine) { queueSubmission(body); return; }
+
+  fetch(API_URL, { method: 'POST', body: JSON.stringify(body) })
+    .then(r => r.json())
+    .then(handleSubmitResult)
+    .catch(() => queueSubmission(body));
+}
+
+function queueSubmission(body) {
+  const queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+  queue.push(body);
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  isSubmitting = false;
+  document.getElementById('submitBtn').disabled = false;
+  showSuccess('Saved locally — no connection right now. It will send automatically once you\'re back online. Do not resubmit.');
+}
+
+function flushQueueIfOnline() {
+  if (!navigator.onLine) return;
+  const queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+  if (queue.length === 0) return;
+
+  const remaining = [];
+  let chain = Promise.resolve();
+  queue.forEach(item => {
+    chain = chain.then(() =>
+      fetch(API_URL, { method: 'POST', body: JSON.stringify(item) })
+        .then(r => r.json())
+        .then(res => { if (!res.success) remaining.push(item); })
+        .catch(() => remaining.push(item))
+    );
+  });
+  chain.then(() => {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(remaining));
+    if (queue.length > remaining.length) showToast(`${queue.length - remaining.length} queued inspection(s) sent.`);
+  });
+}
+
+function handleSubmitResult(result) {
+  isSubmitting = false;
+  document.getElementById('submitBtn').disabled = false;
+  if (result.success) {
+    let msg = 'Your inspection has been recorded.';
+    if (result.pmStatus && result.pmStatus.overdue) msg += ' Note: this lift\'s PM is overdue.';
+    else if (result.pmStatus && result.pmStatus.dueSoon) msg += ' Note: this lift\'s PM is due soon.';
+    showSuccess(msg);
+  } else {
+    showToast(result.message || 'Failed to submit inspection', 'error');
+  }
+}
+
+function showSuccess(msg) {
+  document.getElementById('successMsg').textContent = msg;
+  document.getElementById('successOverlay').style.display = 'flex';
+}
+document.getElementById('successOkBtn').addEventListener('click', () => {
+  document.getElementById('successOverlay').style.display = 'none';
+  resetForm();
+});
+
+function resetForm() {
+  document.getElementById('inspectionForm').reset();
+  document.getElementById('date').valueAsDate = new Date();
+  signaturePad.clear();
+  document.getElementById('lpgSection').style.display = 'none';
+  document.getElementById('pmCard').style.display = 'none';
+  document.getElementById('pmBanner').style.display = 'none';
+  document.getElementById('defectsRequired').style.display = 'none';
+  Object.keys(itemStatus).forEach(k => delete itemStatus[k]);
+  renderChecklist(checklistData);
+}
+
+function validateForm() {
+  let valid = true;
+  ['operatorName', 'date', 'liftNumber', 'location', 'meterReading'].forEach(id => {
+    const field = document.getElementById(id);
+    const err = document.getElementById(id + 'Error');
+    if (err) err.style.display = 'none';
+    if (!field.value) { valid = false; if (err) err.style.display = 'block'; }
+  });
+
+  if (signaturePad.isEmpty()) { document.getElementById('signatureError').style.display = 'block'; valid = false; }
+
+  const unchecked = checklistData.filter(item => !itemStatus[item.id]);
+  if (unchecked.length > 0) { showToast(`${unchecked.length} inspection items need to be checked`, 'error'); valid = false; }
+
+  const hasFail = Object.values(itemStatus).includes('fail');
+  if (hasFail && !document.getElementById('defects').value.trim()) {
+    document.getElementById('defectsError').style.display = 'block';
+    valid = false;
+  }
+
+  return valid;
+}
+</script>
+</body>
+</html>

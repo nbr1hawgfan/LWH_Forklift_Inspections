@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Admin - Forklift Fleet</title>
+<meta name="theme-color" content="#C41230">
+<style>
+  :root {
+    --brand-red:#C41230; --brand-red-dark:#9E0E27; --brand-black:#1A1A1A; --brand-gold:#D4A017;
+    --bg:#F4F4F5; --surface:#FFFFFF; --surface-2:#F7F7F8; --border:#E2E2E4;
+    --text:#1A1A1A; --text-dim:#5B6572; --primary:#1A1A1A;
+    --success:#157A3D; --danger:#C41230; --warning:#B8860B;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding-bottom:2rem; }
+  .container { max-width:700px; margin:0 auto; padding:0 14px; }
+  header {
+    background:linear-gradient(135deg,var(--brand-red),var(--brand-red-dark)); padding:1rem; margin-bottom:1.1rem;
+    display:flex; align-items:center; gap:0.75rem; border-bottom:3px solid var(--brand-black);
+  }
+  .header-logo { width:40px; height:40px; border-radius:50%; background:#fff; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand-red); font-size:1rem; }
+  header h1 { margin:0; font-size:1.05rem; color:#fff; text-transform:uppercase; letter-spacing:0.03em; font-weight:800; }
+  header .header-sub { font-size:0.72rem; color:rgba(255,255,255,0.85); text-transform:uppercase; letter-spacing:0.06em; }
+  .card { background:var(--surface); border:1.5px solid var(--brand-gold); border-radius:6px; margin-bottom:1rem; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+  .card-title { font-weight:800; margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.03em; font-size:0.85rem; color:var(--brand-black); }
+  input, select { width:100%; background:var(--surface); border:1.5px solid var(--border); color:var(--text); border-radius:4px; padding:0.65rem 0.8rem; font-size:1rem; margin-bottom:0.85rem; }
+  input:focus, select:focus { outline:none; border-color:var(--brand-red); }
+  label { display:block; font-size:0.82rem; color:var(--text-dim); margin-bottom:0.3rem; font-weight:600; }
+  button.btn { border:none; border-radius:4px; padding:0.75rem; font-size:0.9rem; font-weight:800; width:100%; cursor:pointer; text-transform:uppercase; letter-spacing:0.03em; }
+  .btn-primary { background:var(--brand-black); color:#fff; }
+  .lift-row { display:flex; justify-content:space-between; align-items:center; padding:0.7rem 0.85rem; border-radius:4px; background:var(--surface-2); margin-bottom:0.5rem; border:1px solid var(--border); border-left:4px solid var(--border); }
+  .lift-row.dueSoon { border-left-color:var(--warning); }
+  .lift-row.overdue { border-left-color:var(--danger); }
+  .lift-row.ok { border-left-color:var(--success); }
+  .lift-main { font-weight:700; }
+  .lift-sub { font-size:0.78rem; color:var(--text-dim); }
+  .lift-hours { text-align:right; font-size:0.85rem; font-weight:700; }
+  .lift-hours.warn { color:var(--warning); }
+  .lift-hours.bad { color:var(--danger); }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--brand-black); color:#fff; border:1px solid var(--border); padding:0.7rem 1.1rem; border-radius:4px; font-size:0.9rem; display:none; z-index:999; }
+  #toast.error { border-color:var(--danger); background:var(--brand-red-dark); }
+  a { color: var(--brand-red); font-weight:600; }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<header>
+  <div class="header-logo">LW</div>
+  <div>
+    <h1>PM Admin</h1>
+    <div class="header-sub">Forklift Fleet — Logistics Warehouse</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="card" id="loginCard">
+    <label>Admin Passcode</label>
+    <input type="password" id="passcode" placeholder="Enter passcode">
+    <button class="btn btn-primary" id="loginBtn">View Fleet PM Status</button>
+  </div>
+
+  <div id="fleetSection" style="display:none;">
+
+    <div class="card">
+      <div class="card-title">Fleet PM Status</div>
+      <div id="fleetList">Loading...</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Log a Completed PM</div>
+      <label>Forklift Number</label>
+      <select id="pmLift"></select>
+      <label>Meter Reading at PM</label>
+      <input type="number" id="pmMeter" min="0" step="1">
+      <label>Performed By</label>
+      <input type="text" id="pmPerformedBy" placeholder="Mechanic / vendor name">
+      <label>Notes (optional)</label>
+      <input type="text" id="pmNotes" placeholder="e.g. oil change, filter replacement">
+      <button class="btn btn-primary" id="logPmBtn">Record PM Completion</button>
+    </div>
+
+  </div>
+
+  <p><a href="index.html">&larr; Back to inspection form</a></p>
+</div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
+let passcode = '';
+let fleetData = [];
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type === 'error' ? 'error' : '';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3500);
+}
+
+document.getElementById('loginBtn').addEventListener('click', () => {
+  passcode = document.getElementById('passcode').value;
+  if (!passcode) { showToast('Enter a passcode', 'error'); return; }
+  loadFleetStatus();
+});
+
+function loadFleetStatus() {
+  fetch(`${API_URL}?action=pmStatus&passcode=${encodeURIComponent(passcode)}`)
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) { showToast(res.message || 'Invalid passcode', 'error'); return; }
+      fleetData = res.data;
+      document.getElementById('loginCard').style.display = 'none';
+      document.getElementById('fleetSection').style.display = 'block';
+      renderFleet(fleetData);
+      populateLiftSelect(fleetData);
+    })
+    .catch(() => showToast('Could not reach server', 'error'));
+}
+
+function renderFleet(fleet) {
+  const container = document.getElementById('fleetList');
+  container.innerHTML = '';
+  const sorted = [...fleet].sort((a, b) => a.hoursUntilPm - b.hoursUntilPm);
+  sorted.forEach(lift => {
+    const row = document.createElement('div');
+    row.className = `lift-row ${lift.status}`;
+    const hoursClass = lift.status === 'overdue' ? 'bad' : (lift.status === 'dueSoon' ? 'warn' : '');
+    row.innerHTML = `
+      <div>
+        <div class="lift-main">${lift.liftNumber} <span style="color:var(--text-dim);font-weight:400;">(${lift.type})</span></div>
+        <div class="lift-sub">Last PM: ${lift.lastPmDate} @ ${lift.lastPmMeter} hrs • Current: ${lift.currentReading} hrs</div>
+      </div>
+      <div class="lift-hours ${hoursClass}">
+        ${lift.status === 'overdue' ? `${Math.abs(lift.hoursUntilPm)} hrs overdue` : `${lift.hoursUntilPm} hrs left`}
+      </div>`;
+    container.appendChild(row);
+  });
+}
+
+function populateLiftSelect(fleet) {
+  const select = document.getElementById('pmLift');
+  select.innerHTML = '';
+  fleet.forEach(lift => {
+    const opt = document.createElement('option');
+    opt.value = lift.liftNumber;
+    opt.textContent = `${lift.liftNumber} (${lift.type})`;
+    select.appendChild(opt);
+  });
+}
+
+document.getElementById('logPmBtn').addEventListener('click', () => {
+  const liftNumber = document.getElementById('pmLift').value;
+  const meterReading = document.getElementById('pmMeter').value;
+  const performedBy = document.getElementById('pmPerformedBy').value;
+  const notes = document.getElementById('pmNotes').value;
+
+  if (!liftNumber || !meterReading || !performedBy) {
+    showToast('Forklift, meter reading, and performed-by are required', 'error');
+    return;
+  }
+
+  const body = {
+    action: 'recordPM',
+    payload: { liftNumber, meterReading, performedBy, notes, passcode }
+  };
+
+  fetch(API_URL, { method: 'POST', body: JSON.stringify(body) })
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        showToast('PM recorded for ' + liftNumber);
+        document.getElementById('pmMeter').value = '';
+        document.getElementById('pmPerformedBy').value = '';
+        document.getElementById('pmNotes').value = '';
+        loadFleetStatus();
+      } else {
+        showToast(res.message || 'Failed to record PM', 'error');
+      }
+    })
+    .catch(() => showToast('Could not reach server', 'error'));
+});
+</script>
+</body>
+</html>
