@@ -83,14 +83,15 @@
   .badge.bad { background: var(--danger); color: #fff; }
   .checklist-item {
     background: var(--surface); border: 1.5px solid var(--border); border-radius: 4px;
-    padding: 0.85rem; margin-bottom: 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    padding: 0.85rem; margin-bottom: 0.6rem; display: flex; flex-wrap: wrap;
+    align-items: center; justify-content: space-between; gap: 0.5rem 0.6rem;
   }
   .checklist-item.pass { border-color: var(--success); border-left-width: 4px; }
   .checklist-item.fail { border-color: var(--danger); border-left-width: 4px; }
   .checklist-item.na { opacity: 0.55; }
   .checklist-item.na .checklist-question { text-decoration: line-through; }
-  .checklist-question { flex: 1; font-size: 0.92rem; }
-  .status-buttons { display: flex; gap: 0.4rem; flex-shrink: 0; }
+  .checklist-question { flex: 1 1 160px; min-width: 0; font-size: 0.92rem; }
+  .status-buttons { display: flex; gap: 0.4rem; flex-shrink: 0; margin-left: auto; }
   .status-btn {
     width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--border);
     background: var(--surface); color: var(--text-dim); font-size: 1.1rem; font-weight: 700;
@@ -99,6 +100,10 @@
   .status-btn.active-pass { border-color: var(--success); background: rgba(21,122,61,0.12); color: var(--success); }
   .status-btn.active-fail { border-color: var(--danger); background: rgba(196,18,48,0.1); color: var(--danger); }
   .status-btn.active-na { border-color: var(--na); background: rgba(138,141,145,0.15); color: var(--na); }
+  @media (max-width: 380px) {
+    .status-btn { width: 38px; height: 38px; font-size: 1rem; }
+    .status-buttons { gap: 0.3rem; }
+  }
   .checkbox-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
   .checkbox-row input[type=checkbox] { width: 20px; height: 20px; margin: 0; flex-shrink: 0; accent-color: var(--brand-red); }
   .checkbox-row label { margin: 0; color: var(--text); font-weight: 400; }
@@ -401,6 +406,8 @@ function isApplicable(appliesTo, liftType) {
   return normalizeType(appliesTo) === normalizeType(liftType);
 }
 
+let forcedNaIds = new Set(); // tracks which items are currently hidden due to a lift-type mismatch
+
 function renderChecklist(items, liftType) {
   const container = document.getElementById('checklistContainer');
   if (!items || items.length === 0) return;
@@ -410,33 +417,51 @@ function renderChecklist(items, liftType) {
     return acc;
   }, {});
 
+  const newForcedNaIds = new Set();
+
   container.innerHTML = '';
   Object.entries(categorized).forEach(([category, catItems]) => {
+    // Items that don't apply to this lift's type are set to N/A automatically
+    // and hidden entirely, rather than shown greyed-out - keeps the list short
+    // on a phone screen. An item the operator manually marks N/A (still shown
+    // in the visibleItems list, since it's not lift-type forced) stays visible
+    // and greyed-out so they can change it back if needed.
+    const visibleItems = [];
+    catItems.forEach(item => {
+      const forcedNa = liftType && !isApplicable(item.appliesTo, liftType);
+      if (forcedNa) {
+        newForcedNaIds.add(item.id);
+        itemStatus[item.id] = 'na';
+      } else if (forcedNaIds.has(item.id)) {
+        // Was hidden/forced-na before (e.g. lift selection changed), now applicable again - clear it
+        delete itemStatus[item.id];
+      }
+      if (!forcedNa) visibleItems.push(item);
+    });
+
+    if (visibleItems.length === 0) return; // whole category doesn't apply to this lift type
+
     const div = document.createElement('div');
     div.className = 'category-block';
     div.style.marginBottom = '1.25rem';
     div.innerHTML = `
       <div class="category-header">
         <h3>${category}</h3>
-        <span class="badge cat-badge">${catItems.length} items</span>
+        <span class="badge cat-badge">${visibleItems.length} items</span>
       </div>
       <div class="cat-items"></div>`;
     const itemsWrap = div.querySelector('.cat-items');
 
-    catItems.forEach(item => {
-      const forcedNa = liftType && !isApplicable(item.appliesTo, liftType);
-      if (forcedNa) itemStatus[item.id] = 'na';
-      else if (itemStatus[item.id] === 'na' && !forcedNa) delete itemStatus[item.id];
-
+    visibleItems.forEach(item => {
       const row = document.createElement('div');
-      row.className = 'checklist-item' + (forcedNa ? ' na' : '');
+      row.className = 'checklist-item';
       row.id = `item_${item.id}`;
       row.innerHTML = `
         <div class="checklist-question">${item.question}</div>
         <div class="status-buttons">
-          <button type="button" class="status-btn" data-status="pass" ${forcedNa ? 'disabled' : ''}>✓</button>
-          <button type="button" class="status-btn" data-status="na" ${forcedNa ? 'disabled' : ''}>–</button>
-          <button type="button" class="status-btn" data-status="fail" ${forcedNa ? 'disabled' : ''}>✕</button>
+          <button type="button" class="status-btn" data-status="pass">✓</button>
+          <button type="button" class="status-btn" data-status="na">–</button>
+          <button type="button" class="status-btn" data-status="fail">✕</button>
         </div>`;
       itemsWrap.appendChild(row);
 
@@ -444,13 +469,13 @@ function renderChecklist(items, liftType) {
         btn.addEventListener('click', () => setItemStatus(item.id, btn.dataset.status, row));
       });
 
-      if (forcedNa) applyItemVisual(row, 'na');
-      else if (itemStatus[item.id]) applyItemVisual(row, itemStatus[item.id]);
+      if (itemStatus[item.id]) applyItemVisual(row, itemStatus[item.id]);
     });
 
     container.appendChild(div);
   });
 
+  forcedNaIds = newForcedNaIds;
   updateCategoryBadges();
 }
 
