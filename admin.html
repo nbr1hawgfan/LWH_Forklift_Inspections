@@ -41,6 +41,18 @@
   #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--brand-black); color:#fff; border:1px solid var(--border); padding:0.7rem 1.1rem; border-radius:4px; font-size:0.9rem; display:none; z-index:999; }
   #toast.error { border-color:var(--danger); background:var(--brand-red-dark); }
   a { color: var(--brand-red); font-weight:600; }
+  .btn-row { display:flex; gap:0.6rem; margin-top:0.85rem; }
+  .btn-row .btn { flex:1; }
+  .btn-outline { background:var(--surface); color:var(--brand-black); border:1.5px solid var(--brand-black); }
+  @media print {
+    .no-print { display:none !important; }
+    body { background:#fff; }
+    header { background:#fff !important; border-bottom:2px solid #1A1A1A; }
+    header h1, header .header-sub { color:#1A1A1A !important; }
+    .header-logo { display:none; }
+    .card { border-color:#1A1A1A; box-shadow:none; }
+    .lift-row { break-inside: avoid; }
+  }
 </style>
 </head>
 <body>
@@ -68,9 +80,13 @@
     <div class="card">
       <div class="card-title">Fleet PM Status</div>
       <div id="fleetList">Loading...</div>
+      <div class="btn-row no-print">
+        <button class="btn btn-outline" id="exportCsvBtn">Export CSV</button>
+        <button class="btn btn-outline" id="printBtn">Print Report</button>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card no-print">
       <div class="card-title">Log a Completed PM</div>
       <label>Forklift Number</label>
       <select id="pmLift"></select>
@@ -85,7 +101,7 @@
 
   </div>
 
-  <p><a href="index.html">&larr; Back to inspection form</a></p>
+  <p class="no-print"><a href="index.html">&larr; Back to inspection form</a></p>
 </div>
 
 <script>
@@ -140,6 +156,36 @@ function renderFleet(fleet) {
     container.appendChild(row);
   });
 }
+
+function csvEscape(value) {
+  const s = String(value ?? '');
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportFleetCsv() {
+  if (!fleetData || fleetData.length === 0) { showToast('Nothing to export yet', 'error'); return; }
+
+  const headers = ['Lift Number', 'Type', 'PM Interval (hrs)', 'Last PM Meter', 'Last PM Date', 'Current Reading', 'Hours Until PM', 'Status'];
+  const sorted = [...fleetData].sort((a, b) => a.hoursUntilPm - b.hoursUntilPm);
+  const rows = sorted.map(l => [
+    l.liftNumber, l.type, l.pmInterval, l.lastPmMeter, l.lastPmDate, l.currentReading, l.hoursUntilPm, l.status
+  ]);
+
+  const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `forklift-pm-status-${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('exportCsvBtn').addEventListener('click', exportFleetCsv);
+document.getElementById('printBtn').addEventListener('click', () => window.print());
 
 function populateLiftSelect(fleet) {
   const select = document.getElementById('pmLift');
