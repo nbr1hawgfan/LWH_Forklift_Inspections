@@ -1,6 +1,6 @@
 // Minimal app-shell cache so the form loads even with no connection.
 // Bump CACHE_NAME whenever you change index.html/admin.html so clients pick up the update.
-const CACHE_NAME = 'forklift-inspection-v2';
+const CACHE_NAME = 'forklift-inspection-v3';
 const ASSETS = [
   './',
   './index.html',
