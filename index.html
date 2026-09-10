@@ -227,7 +227,7 @@
 
 <script>
 // ====== CONFIG - update this to your deployed GAS Web App URL ======
-const API_URL = 'https://script.google.com/macros/s/AKfycbxYJD9SUv6cWTO5Teug_UHqc835NPHyxu2diJWPoTP5hZN1Ia2ABqmOkZAn60K2Rnj3/exec';
+const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
 const QUEUE_KEY = 'forklift_pending_submissions';
 const CACHE_KEY = 'forklift_bootstrap_cache';
 
@@ -235,7 +235,16 @@ let checklistData = [];
 let forkliftData = [];
 let signaturePad;
 let isSubmitting = false;
+let currentSubmissionId = null;
 const itemStatus = {}; // id -> 'pass' | 'fail' | 'na'
+
+function getOrCreateSubmissionId() {
+  if (!currentSubmissionId) {
+    currentSubmissionId = (crypto.randomUUID ? crypto.randomUUID() :
+      Date.now() + '-' + Math.random().toString(36).slice(2));
+  }
+  return currentSubmissionId;
+}
 
 window.addEventListener('load', () => {
   document.getElementById('date').valueAsDate = new Date();
@@ -521,6 +530,7 @@ document.getElementById('inspectionForm').addEventListener('submit', function (e
   document.getElementById('submitBtn').disabled = true;
 
   const formData = {
+    submissionId: getOrCreateSubmissionId(),
     operatorName: document.getElementById('operatorName').value,
     date: document.getElementById('date').value,
     liftNumber: document.getElementById('liftNumber').value,
@@ -563,10 +573,26 @@ function submit(formData) {
 
   if (!navigator.onLine) { queueSubmission(body); return; }
 
+  attemptSubmit(body, 1);
+}
+
+// Apps Script occasionally fails to serve the response back to fetch() even
+// though the submission already succeeded server-side (a known flaky spot in
+// how Google's exec redirect works, not something the browser can prevent).
+// One quick retry clears most of these transient hiccups; if it still fails,
+// fall back to the offline queue. Either way, the backend's submissionId
+// dedup check (see Code.gs) means a retry can never create a duplicate row.
+function attemptSubmit(body, retriesLeft) {
   fetch(API_URL, { method: 'POST', body: JSON.stringify(body) })
     .then(r => r.json())
     .then(handleSubmitResult)
-    .catch(() => queueSubmission(body));
+    .catch(() => {
+      if (retriesLeft > 0) {
+        setTimeout(() => attemptSubmit(body, retriesLeft - 1), 1500);
+      } else {
+        queueSubmission(body);
+      }
+    });
 }
 
 function queueSubmission(body) {
@@ -625,6 +651,7 @@ function resetForm() {
   document.getElementById('inspectionForm').reset();
   document.getElementById('date').valueAsDate = new Date();
   signaturePad.clear();
+  currentSubmissionId = null;
   document.getElementById('lpgSection').style.display = 'none';
   document.getElementById('pmCard').style.display = 'none';
   document.getElementById('pmBanner').style.display = 'none';
