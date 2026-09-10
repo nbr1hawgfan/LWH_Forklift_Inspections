@@ -141,7 +141,8 @@
       <div class="card-header">Basic Information</div>
       <div class="card-body">
         <label>Operator Name *</label>
-        <input type="text" id="operatorName" required>
+        <input type="text" id="operatorName" required list="operatorNamesList" autocomplete="off">
+        <datalist id="operatorNamesList"></datalist>
         <div class="field-error" id="operatorNameError">Please enter your name</div>
 
         <label>Date *</label>
@@ -235,6 +236,7 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbxYJD9SUv6cWTO5Teug_UHqc835NPHyxu2diJWPoTP5hZN1Ia2ABqmOkZAn60K2Rnj3/exec';
 const QUEUE_KEY = 'forklift_pending_submissions';
 const CACHE_KEY = 'forklift_bootstrap_cache';
+const OPERATOR_NAMES_KEY = 'forklift_operator_names';
 
 let checklistData = [];
 let forkliftData = [];
@@ -257,6 +259,7 @@ window.addEventListener('load', () => {
   loadBootstrapData();
   updateConnStatus();
   flushQueueIfOnline();
+  populateOperatorNamesDatalist(loadOperatorNames());
 });
 window.addEventListener('online', () => { updateConnStatus(); flushQueueIfOnline(); });
 window.addEventListener('offline', updateConnStatus);
@@ -284,6 +287,32 @@ function showToast(msg, type) {
   t.className = type === 'error' ? 'error' : '';
   t.style.display = 'block';
   setTimeout(() => t.style.display = 'none', 3500);
+}
+
+/* ---------------- Remembered operator names (per-device convenience) ---------------- */
+// Since the same tablet/phone gets used by whichever driver is on shift, this
+// remembers names typed on THIS device only (localStorage, not shared with
+// anyone else) so returning drivers get an autofill suggestion instead of
+// retyping their name every time. Capped at the 20 most recently used.
+
+function loadOperatorNames() {
+  try { return JSON.parse(localStorage.getItem(OPERATOR_NAMES_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+
+function populateOperatorNamesDatalist(names) {
+  const dl = document.getElementById('operatorNamesList');
+  dl.innerHTML = names.map(n => `<option value="${n.replace(/"/g, '&quot;')}"></option>`).join('');
+}
+
+function saveOperatorName(name) {
+  name = (name || '').trim();
+  if (!name) return;
+  let names = loadOperatorNames().filter(n => n.toLowerCase() !== name.toLowerCase());
+  names.unshift(name);
+  names = names.slice(0, 20);
+  localStorage.setItem(OPERATOR_NAMES_KEY, JSON.stringify(names));
+  populateOperatorNamesDatalist(names);
 }
 
 /* ---------------- Bootstrap data (forklifts / locations / checklist) ---------------- */
@@ -554,9 +583,12 @@ document.getElementById('inspectionForm').addEventListener('submit', function (e
   isSubmitting = true;
   document.getElementById('submitBtn').disabled = true;
 
+  const operatorNameValue = document.getElementById('operatorName').value;
+  saveOperatorName(operatorNameValue);
+
   const formData = {
     submissionId: getOrCreateSubmissionId(),
-    operatorName: document.getElementById('operatorName').value,
+    operatorName: operatorNameValue,
     date: document.getElementById('date').value,
     liftNumber: document.getElementById('liftNumber').value,
     location: document.getElementById('location').value,
