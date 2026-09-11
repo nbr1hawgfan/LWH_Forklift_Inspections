@@ -65,6 +65,11 @@
     color: var(--brand-black); background: var(--surface-2);
   }
   .card-body { padding: 1rem; }
+  .btn-mark-all {
+    background: var(--brand-black); color: #fff; border: none; border-radius: 20px;
+    padding: 0.35rem 0.8rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; cursor: pointer; flex-shrink: 0;
+  }
   label { display:block; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 0.35rem; font-weight: 600; }
   input[type=text], input[type=date], input[type=number], select, textarea {
     width: 100%; background: var(--surface); border: 1.5px solid var(--border);
@@ -197,7 +202,10 @@
     </div>
 
     <div class="card">
-      <div class="card-header">Inspection Checklist</div>
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Inspection Checklist</span>
+        <button type="button" id="markAllPassBtn" class="btn-mark-all">Mark All Pass</button>
+      </div>
       <div class="card-body" id="checklistContainer">
         <div style="color:var(--text-dim);">Loading checklist...</div>
       </div>
@@ -590,6 +598,35 @@ function setItemStatus(id, status, row) {
   updateCategoryBadges();
 }
 
+// Sets every currently-visible checklist item to Pass in one tap, so on a
+// routine day the operator only has to tap the exceptions rather than every
+// single item. Items hidden because they don't apply to this lift's type
+// are left alone (they're already N/A). If any items are already marked
+// Fail, this asks for confirmation first so a stray tap can't silently wipe
+// out a real defect flag.
+function markAllPass() {
+  if (!checklistData || checklistData.length === 0) return;
+
+  const hasFailures = Object.values(itemStatus).includes('fail');
+  if (hasFailures && !confirm('This will overwrite any items already marked Fail with Pass. Continue?')) {
+    return;
+  }
+
+  checklistData.forEach(item => {
+    if (forcedNaIds.has(item.id)) return; // leave lift-type N/A items as-is
+    itemStatus[item.id] = 'pass';
+  });
+
+  document.querySelectorAll('.checklist-item').forEach(row => {
+    const id = row.id.replace('item_', '');
+    if (itemStatus[id]) applyItemVisual(row, itemStatus[id]);
+  });
+
+  updateCategoryBadges();
+}
+
+document.getElementById('markAllPassBtn').addEventListener('click', markAllPass);
+
 function applyItemVisual(row, status) {
   row.classList.remove('pass', 'fail', 'na');
   row.classList.add(status);
@@ -677,7 +714,12 @@ document.getElementById('inspectionForm').addEventListener('submit', function (e
 
   const photoInput = document.getElementById('photos');
   if (photoInput.files.length > 0) {
-    filesToBase64(photoInput.files).then(photos => { formData.photos = photos; submit(formData); });
+    document.getElementById('submitBtn').textContent = 'Processing Photos...';
+    filesToBase64(photoInput.files).then(photos => {
+      document.getElementById('submitBtn').textContent = 'Submitting...';
+      formData.photos = photos;
+      submit(formData);
+    });
   } else {
     formData.photos = [];
     submit(formData);
@@ -692,12 +734,50 @@ function getChecklistResponses() {
   return responses;
 }
 
-function filesToBase64(fileList) {
-  return Promise.all(Array.from(fileList).map(file => new Promise(resolve => {
+// Compresses/resizes each photo client-side before it's turned into base64
+// and sent. A phone camera photo can easily be 3-5MB; several of those plus
+// a signature makes for a large, slow POST - which is exactly the kind of
+// thing that seems to trigger the occasional Apps Script response flakiness
+// seen during testing. Resizing to a reasonable max dimension and re-encoding
+// as JPEG cuts most photos down to a few hundred KB with no meaningful loss
+// for inspection documentation purposes.
+const PHOTO_MAX_DIMENSION = 1600;
+const PHOTO_JPEG_QUALITY = 0.75;
+
+function compressImage(file) {
+  return new Promise(resolve => {
     const reader = new FileReader();
-    reader.onload = e => resolve(e.target.result);
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > PHOTO_MAX_DIMENSION || height > PHOTO_MAX_DIMENSION) {
+          if (width > height) {
+            height = Math.round(height * (PHOTO_MAX_DIMENSION / width));
+            width = PHOTO_MAX_DIMENSION;
+          } else {
+            width = Math.round(width * (PHOTO_MAX_DIMENSION / height));
+            height = PHOTO_MAX_DIMENSION;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY));
+      };
+      // If the browser can't decode this image (rare/unsupported format),
+      // fall back to sending the original rather than blocking submission.
+      img.onerror = () => resolve(e.target.result);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(null);
     reader.readAsDataURL(file);
-  })));
+  });
+}
+
+function filesToBase64(fileList) {
+  return Promise.all(Array.from(fileList).map(compressImage)).then(photos => photos.filter(Boolean));
 }
 
 function submit(formData) {
@@ -733,6 +813,7 @@ function queueSubmission(body) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
   isSubmitting = false;
   document.getElementById('submitBtn').disabled = false;
+  document.getElementById('submitBtn').textContent = 'Submit Inspection';
   showSuccess('Saved locally — no connection right now. It will send automatically once you\'re back online. Do not resubmit.');
 }
 
@@ -760,6 +841,7 @@ function flushQueueIfOnline() {
 function handleSubmitResult(result) {
   isSubmitting = false;
   document.getElementById('submitBtn').disabled = false;
+  document.getElementById('submitBtn').textContent = 'Submit Inspection';
   if (result.success) {
     let msg = 'Your inspection has been recorded.';
     if (result.pmStatus && result.pmStatus.overdue) msg += ' Note: this lift\'s PM is overdue.';
