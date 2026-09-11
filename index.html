@@ -38,7 +38,7 @@
   header {
     background: linear-gradient(135deg, var(--brand-red), var(--brand-red-dark));
     padding: 1rem 1rem; margin-bottom: 1.1rem;
-    display: flex; align-items: center; gap: 0.75rem;
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
     border-bottom: 3px solid var(--brand-black);
   }
   .header-logo {
@@ -50,6 +50,10 @@
   header .header-sub { font-size: 0.72rem; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 1px; }
   #connStatus { font-size: 0.72rem; color: rgba(255,255,255,0.85); margin-top: 4px; }
   #connStatus.offline { color: #ffd9d9; font-weight: 600; }
+  .header-meta { margin-left: auto; text-align: right; flex-shrink: 0; }
+  #headerClock { color: #fff; font-size: 1.05rem; font-weight: 800; line-height: 1.1; }
+  #headerDate { color: rgba(255,255,255,0.85); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  #headerWeather { color: rgba(255,255,255,0.9); font-size: 0.78rem; margin-top: 3px; white-space: nowrap; }
   .card {
     background: var(--surface); border: 1.5px solid var(--brand-gold);
     border-radius: 6px; margin-bottom: 1rem; overflow: hidden;
@@ -103,6 +107,7 @@
   @media (max-width: 380px) {
     .status-btn { width: 38px; height: 38px; font-size: 1rem; }
     .status-buttons { gap: 0.3rem; }
+    .header-meta { flex-basis: 100%; text-align: left; margin-left: 52px; margin-top: 2px; }
   }
   .checkbox-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
   .checkbox-row input[type=checkbox] { width: 20px; height: 20px; margin: 0; flex-shrink: 0; accent-color: var(--brand-red); }
@@ -130,6 +135,11 @@
     <h1>Forklift Inspection</h1>
     <div class="header-sub">Logistics Warehouse</div>
     <div id="connStatus">Online</div>
+  </div>
+  <div class="header-meta">
+    <div id="headerClock">--:--</div>
+    <div id="headerDate"></div>
+    <div id="headerWeather">Weather --</div>
   </div>
 </header>
 
@@ -238,6 +248,12 @@ const QUEUE_KEY = 'forklift_pending_submissions';
 const CACHE_KEY = 'forklift_bootstrap_cache';
 const OPERATOR_NAMES_KEY = 'forklift_operator_names';
 
+// Weather location - update these if this app gets deployed at a different
+// site (e.g. the Dallas or Lexington expansion). Fort Smith, AR by default.
+const WEATHER_LAT = 35.3859;
+const WEATHER_LON = -94.3985;
+const WEATHER_CACHE_KEY = 'forklift_weather_cache';
+
 let checklistData = [];
 let forkliftData = [];
 let signaturePad;
@@ -260,6 +276,8 @@ window.addEventListener('load', () => {
   updateConnStatus();
   flushQueueIfOnline();
   populateOperatorNamesDatalist(loadOperatorNames());
+  startHeaderClock();
+  loadWeather();
 });
 window.addEventListener('online', () => { updateConnStatus(); flushQueueIfOnline(); });
 window.addEventListener('offline', updateConnStatus);
@@ -314,6 +332,63 @@ function saveOperatorName(name) {
   localStorage.setItem(OPERATOR_NAMES_KEY, JSON.stringify(names));
   populateOperatorNamesDatalist(names);
 }
+
+/* ---------------- Header clock and weather ---------------- */
+
+function startHeaderClock() {
+  updateHeaderClock();
+  setInterval(updateHeaderClock, 15000);
+}
+
+function updateHeaderClock() {
+  const now = new Date();
+  document.getElementById('headerClock').textContent = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  document.getElementById('headerDate').textContent = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// WMO weather codes -> simple icon + label. Open-Meteo requires no API key
+// and allows anonymous cross-origin requests, which is why it's a good fit
+// for a static PWA with no backend of its own to hide a key behind.
+const WEATHER_CODES = {
+  0: ['☀️', 'Clear'], 1: ['🌤️', 'Mostly Clear'], 2: ['⛅', 'Partly Cloudy'], 3: ['☁️', 'Cloudy'],
+  45: ['🌫️', 'Fog'], 48: ['🌫️', 'Fog'],
+  51: ['🌦️', 'Drizzle'], 53: ['🌦️', 'Drizzle'], 55: ['🌦️', 'Drizzle'],
+  61: ['🌧️', 'Light Rain'], 63: ['🌧️', 'Rain'], 65: ['🌧️', 'Heavy Rain'],
+  71: ['🌨️', 'Light Snow'], 73: ['🌨️', 'Snow'], 75: ['❄️', 'Heavy Snow'],
+  80: ['🌦️', 'Showers'], 81: ['🌦️', 'Showers'], 82: ['⛈️', 'Storms'],
+  95: ['⛈️', 'Thunderstorm'], 96: ['⛈️', 'Thunderstorm'], 99: ['⛈️', 'Thunderstorm']
+};
+
+function loadWeather() {
+  // Show cached weather immediately (avoids a blank flash), refresh if online.
+  try {
+    const cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || 'null');
+    if (cached) renderWeather(cached);
+  } catch (e) {}
+
+  if (!navigator.onLine) return;
+
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LAT}&longitude=${WEATHER_LON}` +
+    `&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto`;
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.current) return;
+      const weather = { temp: Math.round(data.current.temperature_2m), code: data.current.weather_code, fetchedAt: Date.now() };
+      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(weather));
+      renderWeather(weather);
+    })
+    .catch(() => {}); // weather is a nice-to-have - fail silently, don't interrupt the form
+}
+
+function renderWeather(weather) {
+  const [icon, label] = WEATHER_CODES[weather.code] || ['', ''];
+  document.getElementById('headerWeather').textContent = `${icon} ${weather.temp}°F ${label}`;
+}
+
+// Refresh weather every 30 minutes while the app stays open
+setInterval(loadWeather, 30 * 60 * 1000);
 
 /* ---------------- Bootstrap data (forklifts / locations / checklist) ---------------- */
 
