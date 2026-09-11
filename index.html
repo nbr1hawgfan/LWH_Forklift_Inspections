@@ -846,6 +846,9 @@ function handleSubmitResult(result) {
     let msg = 'Your inspection has been recorded.';
     if (result.pmStatus && result.pmStatus.overdue) msg += ' Note: this lift\'s PM is overdue.';
     else if (result.pmStatus && result.pmStatus.dueSoon) msg += ' Note: this lift\'s PM is due soon.';
+    if (result.photoErrors && result.photoErrors.length > 0) {
+      msg += ' Note: a photo failed to attach - the inspection was still recorded, but let your manager know.';
+    }
     showSuccess(msg);
   } else {
     showToast(result.message || 'Failed to submit inspection', 'error');
