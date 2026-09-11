@@ -109,6 +109,12 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbx04ENDs7GEiiudO_kQMMYr
 let passcode = '';
 let fleetData = [];
 
+// See index.html for why this exists - stops the mouse scroll wheel from
+// silently changing a focused number field's value.
+document.querySelectorAll('input[type=number]').forEach(input => {
+  input.addEventListener('wheel', function () { this.blur(); }, { passive: true });
+});
+
 function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg;
