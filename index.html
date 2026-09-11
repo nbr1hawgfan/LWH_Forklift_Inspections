@@ -286,7 +286,19 @@ window.addEventListener('load', () => {
   populateOperatorNamesDatalist(loadOperatorNames());
   startHeaderClock();
   loadWeather();
+  disableScrollOnNumberInputs();
 });
+
+// Browsers let the mouse scroll wheel silently increment/decrement a
+// focused number input - easy to trigger by accident while scrolling the
+// page. Blurring on wheel stops the value from changing; the page keeps
+// scrolling normally right after since focus is what triggers the browser's
+// built-in step behavior.
+function disableScrollOnNumberInputs() {
+  document.querySelectorAll('input[type=number]').forEach(input => {
+    input.addEventListener('wheel', function () { this.blur(); }, { passive: true });
+  });
+}
 window.addEventListener('online', () => { updateConnStatus(); flushQueueIfOnline(); });
 window.addEventListener('offline', updateConnStatus);
 
